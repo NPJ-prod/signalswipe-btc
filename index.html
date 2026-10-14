@@ -36,9 +36,9 @@ function draw(){
  const raw=visible(),pad={l:8,r:62,t:12,b:20},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
  let candles=[];
  if(raw.length){
-   const duration=span*60000/zoom,bucket=(span===15?30000:60000)/zoom;
+   const duration=span*60000/zoom,bucket=60000;
    for(const p of raw){
-     const key=Math.floor((p.t-(Date.now()-duration))/bucket);
+     const key=Math.floor(p.t/bucket);
      let c=candles[candles.length-1];
      if(!c||c.key!==key)candles.push({key,t:p.t,o:p.v,h:p.v,l:p.v,c:p.v});
      else{c.h=Math.max(c.h,p.v);c.l=Math.min(c.l,p.v);c.c=p.v;}
