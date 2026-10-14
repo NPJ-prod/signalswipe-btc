@@ -63,7 +63,7 @@ function draw(){
    ctx.beginPath();ctx.moveTo(pad.l,y(target));ctx.lineTo(w-pad.r,y(target));ctx.stroke();
    ctx.setLineDash([]);ctx.fillStyle='#ffc66d';ctx.fillText('TARGET',pad.l+4,y(target)-5);ctx.restore();
  }
- const step=cw/candles.length,bodyW=Math.max(2,Math.min(8,step*.88));
+ const step=cw/candles.length,bodyW=Math.max(1,step*1.02);
  candles.forEach((c,i)=>{
    const xx=x(i),yo=y(c.o),yc=y(c.c),yh=y(c.h),yl=y(c.l),up=c.c>=c.o,color=up?'#35d49a':'#ff657a';
    ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=Math.max(1,bodyW*.18);
