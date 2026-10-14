@@ -33,28 +33,62 @@ function draw(){
  canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);
  ctx.setTransform(dpr,0,0,dpr,0,0);
  const w=rect.width,h=rect.height;ctx.clearRect(0,0,w,h);
- const raw=visible(),pad={l:8,r:70,t:14,b:23},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
- ctx.font='11px system-ui';ctx.strokeStyle='#263450';ctx.fillStyle='#9aa9c4';ctx.lineWidth=1;
+ const raw=visible(),pad={l:8,r:68,t:14,b:23},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
  let candles=[];
  if(raw.length){
    const duration=span*60000/zoom,bucket=Math.max(10000,duration/100);
-   for(const p of raw){const key=Math.floor((p.t-(Date.now()-duration))/bucket);let c=candles[candles.length-1];if(!c||c.key!==key){candles.push({key,t:p.t,o:p.v,h:p.v,l:p.v,c:p.v});}else{c.h=Math.max(c.h,p.v);c.l=Math.min(c.l,p.v);c.c=p.v;}}
+   for(const p of raw){
+     const key=Math.floor((p.t-(Date.now()-duration))/bucket);
+     let c=candles[candles.length-1];
+     if(!c||c.key!==key)candles.push({key,t:p.t,o:p.v,h:p.v,l:p.v,c:p.v});
+     else{c.h=Math.max(c.h,p.v);c.l=Math.min(c.l,p.v);c.c=p.v;}
+   }
  }
- if(candles.length<2){ctx.fillText('Waiting for live price history…',pad.l+8,h/2);$('points').textContent=candles.length+' candles';return}
+ if(candles.length<2){ctx.fillStyle='#9aa9c4';ctx.font='12px system-ui';ctx.fillText('Collecting candles…',pad.l+8,h/2);$('points').textContent=candles.length+' candles';return;}
  let min=Math.min(...candles.map(c=>c.l)),max=Math.max(...candles.map(c=>c.h));
- const dataMin=min,dataMax=max,dataRange=max-min||1;const targetNear=target!==null&&target>=dataMin-dataRange*.12&&target<=dataMax+dataRange*.12;if(targetNear){min=Math.min(min,target);max=Math.max(max,target)}
+ const dataMin=min,dataMax=max,dataRange=max-min||1;
+ const targetNear=target!==null&&target>=dataMin-dataRange*.12&&target<=dataMax+dataRange*.12;
+ if(targetNear){min=Math.min(min,target);max=Math.max(max,target);}
  const range=max-min||1;min-=range*.055;max+=range*.055;
  const y=v=>pad.t+ch*(max-v)/(max-min),x=i=>pad.l+cw*(i+.5)/candles.length;
- for(let i=0;i<4;i++){const val=max-(max-min)*i/3,yy=y(val);ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillText(val>=1000?'}
- if(targetNear&&target!==null&&target>=min&&target<=max){ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle='#ffc66d';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(pad.l,y(target));ctx.lineTo(w-pad.r,y(target));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#ffc66d';ctx.fillText('TARGET',pad.l+5,y(target)-7);ctx.restore()}
- const bodyW=Math.max(1,Math.min(5,cw/candles.length*.72));
- candles.forEach((c,i)=>{const xx=x(i),yo=y(c.o),yc=y(c.c),yh=y(c.h),yl=y(c.l),up=c.c>=c.o,color=up?'#35d49a':'#ff657a';ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=Math.max(1,bodyW*.18);ctx.beginPath();ctx.moveTo(xx,yh);ctx.lineTo(xx,yl);ctx.stroke();const top=Math.min(yo,yc),bh=Math.max(1.5,Math.abs(yc-yo));ctx.fillRect(xx-bodyW/2,top,bodyW,bh)});
- // Find recent local swing highs/lows, then extend the latest two pivots as resistance/support lines.
+ ctx.font='10px system-ui';ctx.strokeStyle='#263450';ctx.fillStyle='#9aa9c4';ctx.lineWidth=1;
+ for(let i=0;i<4;i++){
+   const val=max-(max-min)*i/3,yy=y(val);
+   ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();
+   ctx.textAlign='left';
+   ctx.fillText(val>=1000?'$'+(val/1000).toFixed(1)+'k':'$'+Math.round(val),w-pad.r+5,yy+3);
+ }
+ if(targetNear&&target!==null&&target>=min&&target<=max){
+   ctx.save();ctx.setLineDash([4,4]);ctx.strokeStyle='#ffc66d';ctx.lineWidth=1.2;
+   ctx.beginPath();ctx.moveTo(pad.l,y(target));ctx.lineTo(w-pad.r,y(target));ctx.stroke();
+   ctx.setLineDash([]);ctx.fillStyle='#ffc66d';ctx.fillText('TARGET',pad.l+4,y(target)-5);ctx.restore();
+ }
+ const step=cw/candles.length,bodyW=Math.max(1,Math.min(5,step*.72));
+ candles.forEach((c,i)=>{
+   const xx=x(i),yo=y(c.o),yc=y(c.c),yh=y(c.h),yl=y(c.l),up=c.c>=c.o,color=up?'#35d49a':'#ff657a';
+   ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(xx,yh);ctx.lineTo(xx,yl);ctx.stroke();
+   const top=Math.min(yo,yc),bh=Math.max(1,Math.abs(yc-yo));ctx.fillRect(xx-bodyW/2,top,bodyW,bh);
+ });
  const highs=[],lows=[];
- for(let i=1;i<candles.length-1;i++){if(candles[i].h>=candles[i-1].h&&candles[i].h>candles[i+1].h)highs.push({i,v:candles[i].h});if(candles[i].l<=candles[i-1].l&&candles[i].l<candles[i+1].l)lows.push({i,v:candles[i].l})}
- function trendline(points,color,label){if(points.length<2)return;const a=points[points.length-2],b=points[points.length-1];if(a.i===b.i)return;const slope=(b.v-a.v)/(b.i-a.i),v0=a.v-slope*a.i,v1=v0+slope*(candles.length-1);ctx.save();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash([7,4]);ctx.beginPath();ctx.moveTo(x(0),y(v0));ctx.lineTo(x(candles.length-1),y(v1));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=color;ctx.font='bold 10px system-ui';ctx.fillText(label,Math.max(pad.l+3,w-pad.r-64),Math.max(pad.t+12,Math.min(pad.t+ch-4,y(v1)-6)));ctx.restore()}
+ for(let i=1;i<candles.length-1;i++){
+   if(candles[i].h>=candles[i-1].h&&candles[i].h>candles[i+1].h)highs.push({i,v:candles[i].h});
+   if(candles[i].l<=candles[i-1].l&&candles[i].l<candles[i+1].l)lows.push({i,v:candles[i].l});
+ }
+ function trendline(points,color,label){
+   if(points.length<2)return;
+   const a=points[points.length-2],b=points[points.length-1];if(a.i===b.i)return;
+   const slope=(b.v-a.v)/(b.i-a.i),v0=a.v-slope*a.i,v1=v0+slope*(candles.length-1);
+   ctx.save();ctx.strokeStyle=color;ctx.lineWidth=1.4;ctx.setLineDash([5,4]);
+   ctx.beginPath();ctx.moveTo(x(0),y(v0));ctx.lineTo(x(candles.length-1),y(v1));ctx.stroke();
+   ctx.setLineDash([]);ctx.fillStyle=color;ctx.font='bold 9px system-ui';
+   ctx.fillText(label,Math.max(pad.l+3,w-pad.r-56),Math.max(pad.t+10,Math.min(pad.t+ch-3,y(v1)-4)));ctx.restore();
+ }
  trendline(lows,'#76a7ff','SUPPORT');trendline(highs,'#ffc66d','RESIST');
- const lastC=candles[candles.length-1];ctx.fillStyle='#f3f6ff';ctx.font='bold 11px system-ui';ctx.fillText('$'+fmt(lastC.c),w-pad.r+4,y(lastC.c)+4);ctx.fillStyle='#9aa9c4';ctx.font='10px system-ui';ctx.fillText(span+'m candles',pad.l,h-6);$('points').textContent=candles.length+' candles';
+ const lastC=candles[candles.length-1];ctx.fillStyle='#f3f6ff';ctx.font='bold 10px system-ui';
+ ctx.fillText('$'+fmt(lastC.c),w-pad.r+4,Math.max(pad.t+9,Math.min(pad.t+ch-2,y(lastC.c)+3)));
+ ctx.fillStyle='#9aa9c4';ctx.font='10px system-ui';ctx.fillText(span+'m view',pad.l,h-5);
+ $('points').textContent=candles.length+' candles';
 }
 function update(){if(last){$('price').textContent='$'+fmt(last);if(prices.length>1){const oldest=prices.find(p=>p.t>Date.now()-span*60000)||prices[0],pct=(last/oldest.v-1)*100;$('priceChange').textContent=(pct>=0?'+':'')+pct.toFixed(3)+'% over visible window';$('priceChange').style.color=pct>0?'var(--green)':pct<0?'var(--red)':'var(--muted)'}}
 const recent=visible();if(recent.length>=8){
