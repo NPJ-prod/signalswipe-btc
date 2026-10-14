@@ -33,10 +33,10 @@ function draw(){
  canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);
  ctx.setTransform(dpr,0,0,dpr,0,0);
  const w=rect.width,h=rect.height;ctx.clearRect(0,0,w,h);
- const raw=visible(),pad={l:8,r:68,t:14,b:23},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
+ const raw=visible(),pad={l:8,r:62,t:12,b:20},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
  let candles=[];
  if(raw.length){
-   const duration=span*60000/zoom,bucket=Math.max(10000,duration/100);
+   const duration=span*60000/zoom,bucket=(span===15?30000:60000)/zoom;
    for(const p of raw){
      const key=Math.floor((p.t-(Date.now()-duration))/bucket);
      let c=candles[candles.length-1];
@@ -63,12 +63,12 @@ function draw(){
    ctx.beginPath();ctx.moveTo(pad.l,y(target));ctx.lineTo(w-pad.r,y(target));ctx.stroke();
    ctx.setLineDash([]);ctx.fillStyle='#ffc66d';ctx.fillText('TARGET',pad.l+4,y(target)-5);ctx.restore();
  }
- const step=cw/candles.length,bodyW=Math.max(1,Math.min(5,step*.72));
+ const step=cw/candles.length,bodyW=Math.max(2,Math.min(8,step*.88));
  candles.forEach((c,i)=>{
    const xx=x(i),yo=y(c.o),yc=y(c.c),yh=y(c.h),yl=y(c.l),up=c.c>=c.o,color=up?'#35d49a':'#ff657a';
-   ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=1;
+   ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=Math.max(1,bodyW*.18);
    ctx.beginPath();ctx.moveTo(xx,yh);ctx.lineTo(xx,yl);ctx.stroke();
-   const top=Math.min(yo,yc),bh=Math.max(1,Math.abs(yc-yo));ctx.fillRect(xx-bodyW/2,top,bodyW,bh);
+   const top=Math.min(yo,yc),bh=Math.max(1.4,Math.abs(yc-yo));ctx.fillRect(xx-bodyW/2,top,bodyW,bh);
  });
  const highs=[],lows=[];
  for(let i=1;i<candles.length-1;i++){
