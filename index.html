@@ -25,7 +25,84 @@ h1{font-size:clamp(1.6rem,5vw,2.2rem);margin:4px 0}.sub{color:var(--muted);margi
 (()=>{'use strict';
 const $=id=>document.getElementById(id);const canvas=$('chart'),ctx=canvas.getContext('2d');let span=15,zoom=1,target=null,prices=[],last=0,firstVisible=0,ws,manualClose=false;
 const fmt=n=>Number.isFinite(n)?n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
-async function loadMinuteHistory(){try{const r=await fetch('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60',{headers:{'Accept':'application/json'}});if(!r.ok)throw new Error('history unavailable');const rows=await r.json();for(const row of rows){if(!Array.isArray(row)||row.length<5)continue;const p={t:Number(row[0])*1000,l:Number(row[1]),h:Number(row[2]),o:Number(row[3]),c:Number(row[4]),v:Number(row[4]),historical:true};if(!prices.some(x=>Math.floor(x.t/60000)===Math.floor(p.t/60000)))prices.push(p)}prices.sort((a,b)=>a.t-b.t);const cutoff=Date.now()-26*3600000;while(prices.length&&prices[0].t<cutoff)prices.shift();update()}catch(e){$('connection').textContent='Proxy live · history unavailable; candles build as ticks arrive'}}\nfunction connect(){try{ws=new WebSocket('wss://ws-feed.exchange.coinbase.com');ws.onopen=()=>{loadMinuteHistory();ws.send(JSON.stringify({type:'subscribe',product_ids:['BTC-USD'],channels:['ticker'] }));$('connection').textContent='Proxy live · Coinbase BTC-USD';$('dot').classList.add('live')};ws.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.type==='ticker'&&d.product_id==='BTC-USD'&&Number(d.price)>0){const p={t:Date.now(),v:Number(d.price)};last=p.v;prices.push(p);const cutoff=Date.now()-26*3600000;while(prices.length&&prices[0].t<cutoff)prices.shift();update()}}catch(_){} };ws.onerror=()=>{$('connection').textContent='Proxy feed reconnecting…';$('dot').classList.remove('live')};ws.onclose=()=>{ $('connection').textContent='Proxy disconnected · retrying';$('dot').classList.remove('live');if(!manualClose)setTimeout(connect,4000)}}catch(e){$('connection').textContent='WebSocket unavailable'}} 
+async function loadMinuteHistory(){try{const r=await fetch('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60',{headers:{'Accept':'application/json'}});if(!r.ok)throw new Error('history unavailable');const rows=await r.json();for(const row of rows){if(!Array.isArray(row)||row.length<5)continue;const p={t:Number(row[0])*1000,l:Number(row[1]),h:Number(row[2]),o:Number(row[3]),c:Number(row[4]),v:Number(row[4]),historical:true};if(!prices.some(x=>Math.floor(x.t/60000)===Math.floor(p.t/60000)))prices.push(p)}prices.sort((a,b)=>a.t-b.t);const cutoff=Date.now()-26*3600000;while(prices.length&&prices[0].t<cutoff)prices.shift();update()}catch(e){$('connection').textContent='Proxy live · history unavailable; candles build as ticks arrive'}}\nlet restBusy=false, restTimer=null, connectTimer=null;
+async function pollRest(){
+ if(restBusy || (ws && ws.readyState===WebSocket.OPEN))return;
+ restBusy=true;
+ try{
+  const r=await fetch('https://api.exchange.coinbase.com/products/BTC-USD/ticker',{cache:'no-store',headers:{'Accept':'application/json'}});
+  if(!r.ok)throw new Error('ticker HTTP '+r.status);
+  const d=await r.json(),price=Number(d.price);
+  if(!(price>0))throw new Error('invalid ticker price');
+  last=price;
+  const t=d.time?Date.parse(d.time):Date.now();
+  prices.push({t:Number.isFinite(t)?t:Date.now(),v:price});
+  const cutoff=Date.now()-26*3600000;while(prices.length&&prices[0].t<cutoff)prices.shift();
+  $('connection').textContent='Backup live · Coinbase REST proxy';
+  $('dot').classList.add('live');
+  update();
+ }catch(e){
+  if(!ws||ws.readyState!==WebSocket.OPEN){
+   $('connection').textContent='Feed unavailable · retrying';
+   $('dot').classList.remove('live');
+  }
+ }finally{restBusy=false}
+}
+function startRestFallback(){
+ if(restTimer===null){pollRest();restTimer=setInterval(pollRest,5000)}
+}
+function connect(){
+ try{
+  ws=new WebSocket('wss://ws-feed.exchange.coinbase.com');
+  $('connection').textContent='Connecting to Coinbase feed…';
+  if(connectTimer)clearTimeout(connectTimer);
+  connectTimer=setTimeout(()=>{
+   if(ws&&ws.readyState!==WebSocket.OPEN){
+    $('connection').textContent='WebSocket timed out · trying backup feed';
+    $('dot').classList.remove('live');
+    startRestFallback();
+    try{ws.close()}catch(_){}
+   }
+  },8000);
+  ws.onopen=()=>{
+   if(connectTimer)clearTimeout(connectTimer);
+   if(restTimer!==null){clearInterval(restTimer);restTimer=null}
+   loadMinuteHistory();
+   ws.send(JSON.stringify({type:'subscribe',product_ids:['BTC-USD'],channels:['ticker']}));
+   $('connection').textContent='Live · Coinbase WebSocket proxy';
+   $('dot').classList.add('live');
+  };
+  ws.onmessage=e=>{
+   try{
+    const d=JSON.parse(e.data);
+    if(d.type==='ticker'&&d.product_id==='BTC-USD'&&Number(d.price)>0){
+     const p={t:d.time?Date.parse(d.time):Date.now(),v:Number(d.price)};
+     if(!Number.isFinite(p.t))p.t=Date.now();
+     last=p.v;prices.push(p);
+     const cutoff=Date.now()-26*3600000;while(prices.length&&prices[0].t<cutoff)prices.shift();
+     update();
+    }
+   }catch(_){}
+  };
+  ws.onerror=()=>{
+   $('connection').textContent='WebSocket error · trying backup feed';
+   $('dot').classList.remove('live');
+   startRestFallback();
+  };
+  ws.onclose=()=>{
+   if(connectTimer)clearTimeout(connectTimer);
+   $('dot').classList.remove('live');
+   if(!manualClose){
+    $('connection').textContent='WebSocket closed · backup/retry active';
+    startRestFallback();
+    setTimeout(()=>{if(!manualClose)connect()},10000);
+   }
+  };
+ }catch(e){
+  $('connection').textContent='WebSocket unavailable · using backup';
+  startRestFallback();
+ }
+}
 function visible(){const cutoff=Date.now()-span*60000/zoom;return prices.filter(p=>p.t>=cutoff)}
 function draw(){
  const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
